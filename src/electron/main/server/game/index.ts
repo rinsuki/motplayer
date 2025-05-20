@@ -22,9 +22,18 @@ const zCompatibilityOptions = z.object({
         "理由: localStorage を motplayer の管理下に置くことで、motplayer によりセーブデータが管理できるようになります。",
         "意図せず管理されていないストレージを使うことを防ぐことを目的として、CSP sandbox を使用してストレージ類のAPIを無効化しているため、これがないとストレージが一切存在しなくなります。",
     ].join("\n")),
+    requirePolyfillSeriesOne: z.array(z.string()).default(["js/plugins/inazuma/"]).describe([
+        "require polyfill を挿入 (するパスを指定)",
+        "理由: 一部ゲームは NW.js 環境のみを想定したプラグインを使用しているため、require() のpolyfillが必要になります。", 
+        "このpolyfillは一部モジュールのみのpolyfillになるので、全てのゲームがこれで動作するわけではありません。",
+    ].join("\n")),
+    disableMZTouchUIPaths: z.array(z.string()).default(["/HalfMoveEx.js"]).describe([
+        "一部MZ作品のタッチUIを強制的に無効化",
+        "理由: 一部のゲームで、タッチUIが原因でセーブデータが読み込めない不具合が起きるため、該当しそうなタイトルでタッチUIを無効化します。",
+    ].join("\n")),
 })
 
-const CSP_RULE = "default-src 'self' 'unsafe-eval' 'unsafe-inline' data: blob: motplayer-game://shared; sandbox allow-scripts allow-popups"
+const CSP_RULE = "default-src 'self' 'unsafe-eval' 'unsafe-inline' data: blob: motplayer-game://shared; sandbox allow-scripts allow-popups allow-modals"
 
 type DirEntry = { name: string; isDirectory: boolean }
 export class GameServer {
@@ -92,7 +101,7 @@ export class GameServer {
             return this.fetchDir(url, dirpath, dir)
         }
 
-        const file = this.#filesMap.get(url.pathname.toLowerCase())
+        const file = this.#filesMap.get(decodeURIComponent(url.pathname.toLowerCase()))
         if (file == null) {
             throw new Error("FILE_NOT_FOUND")
         }
@@ -128,6 +137,47 @@ export class GameServer {
             if (this.#compatibilityOptions.enableLocalStorageImpl) {
                 text = text.replace("<script", "<!-- motplayer inject: enableLocalStorageImpl --><script src=motplayer-game://shared/bundle/local-storage.js data-api=/api/localstorage></script><script")
             }
+            if (url.searchParams.get("inject_require1") === "y") {
+                text = text.replace("<script", "<!-- motplayer inject: requirePolyfillSeriesOne --><script src=motplayer-game://shared/bundle/require1.js></script><script")
+            }
+            if (originalText !== text) {
+                content = new File([text], content.name, { type: content.type })
+            }
+        }
+        if (contentType === "application/javascript") {
+            let text = new TextDecoder().decode(await content.arrayBuffer())
+            const originalText = text
+            if (this.#compatibilityOptions.requirePolyfillSeriesOne.some(x => url.pathname.toLowerCase().includes(x.toLowerCase()))) {
+                if (text.includes("require(")) {
+                    text = [
+                        "{/* motplayer inject: requirePolyfillSeriesOne */",
+                        "const require = window.__REQUIRE_POLYFILL_SERIES_ONE__ ?? (" + (() => {
+                            const url = new URL(location.href)
+                            if (url.searchParams.get("inject_require1") !== "y") {
+                                url.searchParams.set("inject_require1", "y")
+                                location.replace(url)
+                            }
+                            throw new Error("motplayer: require polyfill series one is not injected...")
+                        }) + ");",
+                        "const Buffer = window.__REQUIRE_POLYFILL_SERIES_ONE__?.Buffer;",
+                        "const process = window.__REQUIRE_POLYFILL_SERIES_ONE__?.process;",
+                        text,
+                        "}"
+                    ].join("\n")
+                }
+            }
+            if (this.#compatibilityOptions.disableMZTouchUIPaths.some(x => url.pathname.toLowerCase().includes(x.toLowerCase()))) {
+                text = text + [
+                    "",
+                    ";{console.info('motplayer inject: disableMZTouchUIPaths');",
+                    "document.addEventListener('keydown', e => {",
+                    "console.info('motplayer inject (actual): disableMZTouchUIPaths');try {",
+                    "ConfigManager.touchUI = false",
+                    "} catch(e) {",
+                    "console.error(\"motplayer: touchUI disable failed\", e)",
+                    "}}, {once: true})}",
+                ].join("\n")
+            }
             if (originalText !== text) {
                 content = new File([text], content.name, { type: content.type })
             }
@@ -144,6 +194,13 @@ export class GameServer {
     }
 
     private async fetchDir(url: URL, dirpath: string, dir: DirEntry[]) {
+        if (url.searchParams.get("mode") === "readdirSimple") {
+            return new Response(JSON.stringify(dir.map(x => x.name)), {
+                headers: {
+                    "Content-Type": "application/json",
+                }
+            })
+        }
         let html = "<!DOCTYPE html><html><head><meta charset=UTF-8></head><body><h1>Index of " + escapeHTML(decodeURI(url.pathname)) + "</h1>"
         if (dir.some(x => x.name === "package.json")) {
             const packageJsonChecker = "(" + (() => {

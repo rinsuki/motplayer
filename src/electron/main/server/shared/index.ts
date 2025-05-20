@@ -11,6 +11,13 @@ export async function fetchShared(request: Request) {
                 "Content-Type": "application/javascript",
             }
         })
+    case "/bundle/require1.js":
+        const r1 = await readFile(new URL("../../../../browser/bundle/require1.js", import.meta.url).pathname)
+        return new Response(r1, {
+            headers: {
+                "Content-Type": "application/javascript",
+            }
+        })
     }
     throw new Error("NOT_FOUND")
 }

@@ -5,7 +5,7 @@ import { join as joinposix } from "node:path/posix"
 import { ext2mime } from "../../ext2mime.js"
 import { z } from "zod"
 import { zLocalStorageRequest } from "../../../../shared/protocols/local-storage.js"
-import { readFile, writeFile } from "node:fs/promises"
+import { readFile, unlink, writeFile } from "node:fs/promises"
 import { escapeHTML } from "./html-escape.js"
 import { DatabaseSync } from "node:sqlite"
 import { createHash } from "node:crypto"
@@ -76,6 +76,24 @@ export class GameServer {
             this.#database = new DatabaseSync(savePath + ".motplayer_save")
         }
         this.#database.exec(`CREATE TABLE IF NOT EXISTS local_storage (key TEXT PRIMARY KEY, value TEXT, created_at INTEGER, updated_at INTEGER) STRICT`)
+        readFile(zipPath + ".motplayer.save.import.json", { encoding: "utf-8" }).then(async data => {
+            const json = JSON.parse(data)
+            if (!Array.isArray(json)) {
+                console.warn("motplayer: save import file is not an array")
+                return
+            }
+            for (const item of json) {
+                if (typeof item.key !== "string" || typeof item.value !== "string") {
+                    console.warn("motplayer: save import file is not valid", item)
+                    continue
+                }
+                this.#database.prepare("INSERT INTO local_storage (key, value, created_at, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at").run(item.key, item.value, Date.now(), Date.now())
+            }
+            console.log("motplayer: save import file loaded")
+            await unlink(zipPath + ".motplayer.save.import.json")
+        }).catch(e => {
+            console.warn("Failed to read save import file (probably ok)", e)
+        })
     }
 
     static async init(zipPath: string, compatibilityOptions: unknown | z.infer<typeof zCompatibilityOptions> = {}) {

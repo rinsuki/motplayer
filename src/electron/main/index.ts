@@ -7,7 +7,7 @@ const zippath = process.argv[2]
 const gameServers = new Map<string, GameServer>()
 function registerGameServer(gameServer: GameServer) {
     const domain = gameServer.zipId + ".game.invalid"
-    gameServers.set(gameServer.zipId, gameServer)
+    gameServers.set(domain, gameServer)
     return domain
 }
 const gameDomain = registerGameServer(await GameServer.init(zippath))

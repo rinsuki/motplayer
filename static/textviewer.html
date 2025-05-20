@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="UTF-8">
+        <style>
+            main {
+                display: flex;
+                flex-direction: column;
+                height: calc(100vh - 16px);
+            }
+            main > textarea {
+                flex: 1;
+                resize: none;
+            }
+        </style>
+    </head>
+    <body>
+        <main>
+            <h1></h1>
+            <div>
+                <a href="./">戻る</a>
+                文字コード (文字化けしている場合変えてみてください):&nbsp;
+                <select id="charset">
+                    <option value="UTF-8">UTF-8</option>
+                    <option value="Shift_JIS">Shift-JIS</option>
+                </select>
+            </div>
+            <textarea>読み込み中……</textarea>
+        </main>
+        <script>
+            document.querySelector("h1").textContent = decodeURI(location.pathname)
+            const charsetSwitcher = document.querySelector("#charset")
+            const xhr = new XMLHttpRequest()
+            xhr.responseType = "arraybuffer"
+            xhr.open("GET", "?", true)
+            function rerender() {
+                document.querySelector("textarea").value = new TextDecoder(charsetSwitcher.value).decode(xhr.response)
+            }
+            xhr.addEventListener("load", () => {
+                rerender()
+            })
+            charsetSwitcher.addEventListener("change", () => {
+                rerender()
+            })
+            xhr.send()
+        </script>
+    </body>
+</html>

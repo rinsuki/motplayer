@@ -1,0 +1,4 @@
+*.ls.json
+*.motplayer_save
+/node_modules
+/dist

@@ -26,10 +26,11 @@ const zCompatibilityOptions = z.object({
 
 const CSP_RULE = "default-src 'self' 'unsafe-eval' 'unsafe-inline' data: blob: motplayer-game://shared; sandbox allow-scripts allow-popups"
 
+type DirEntry = { name: string; isDirectory: boolean }
 export class GameServer {
     public readonly zipId: string
     #filesMap = new Map<string, ZipFileEntry>()
-    #dirMap = new Map<string, {name: string, isDirectory: boolean}[]>()
+    #dirMap = new Map<string, DirEntry[]>()
     #compatibilityOptions: z.infer<typeof zCompatibilityOptions>
     #database
 
@@ -88,73 +89,7 @@ export class GameServer {
         }
         const dir = this.#dirMap.get(dirpath.toLowerCase())
         if (dir != null) {
-            let html = "<!DOCTYPE html><html><head><meta charset=UTF-8></head><body><h1>Index of " + escapeHTML(decodeURI(url.pathname)) + "</h1>"
-            if (dir.some(x => x.name === "package.json")) {
-                const packageJsonChecker = "(" + (() => {
-                    const xhr = new XMLHttpRequest()
-                    xhr.open("GET", "package.json", false)
-                    xhr.send()
-                    const json = JSON.parse(xhr.responseText)
-                    if (json.main && json.main.endsWith(".html") && json.window && json.window.width && json.window.height) {
-                        // #region RPGツクールMV用の処理
-                        const systemJsonUrl = new URL("./data/System.json", new URL(json.main, location.href))
-                        try {
-                            const systemJsonXhr = new XMLHttpRequest()
-                            systemJsonXhr.open("GET", systemJsonUrl.href, false)
-                            systemJsonXhr.send()
-                            const systemJson = JSON.parse(systemJsonXhr.responseText)
-                            if (systemJson && typeof systemJson.gameTitle === "string") {
-                                json.window.title = systemJson.gameTitle
-                            }
-                        } catch(e) {
-                            console.error("Failed to load System.json", e)
-                        }
-                        // #endregion
-                        const button = document.createElement("button")
-                        if (json.window.title) {
-                            button.innerText = json.window.title
-                        } else {
-                            button.innerText = "このフォルダのアプリ"
-                        }
-                        button.innerText += "を起動"
-                        button.addEventListener("click", () => {
-                            resizeTo(
-                                json.window.width + (window.outerWidth - window.innerWidth),
-                                json.window.height + (window.outerHeight - window.innerHeight)
-                            )
-                            setTimeout(() => {
-                                location.href = json.main
-                            }, 100)
-                        })
-                        document.currentScript?.parentElement?.appendChild(button)
-                    }
-                }).toString() + ")()"
-                html += "<div><script>" + packageJsonChecker + "</script></div>"
-            }
-            html += "<ul>"
-            if (dirpath !== "/") {
-                html += "<li><a href=..>..</a></li>"
-            }
-            for (const file of dir) {
-                html += "<li>"
-                html += file.isDirectory ? "📁 " : "📄 "
-                html += "<a"
-                if (file.isDirectory || file.name.toLowerCase().endsWith(".html")) {
-                    html += " href=\"" + encodeURI(file.name) + (file.isDirectory ? "/" : "") + "\""
-                } else if (file.name.toLowerCase().endsWith(".txt")) {
-                    html += " href=\"" + encodeURI(file.name) + "?mode=textviewer\""
-                }
-                html += ">"
-                html += escapeHTML(file.name)
-                html += "</a>"
-            }
-            html += "</ul><hr><address>motplayer index</address></body></html>"
-            return new Response(html, {
-                headers: {
-                    "Content-Security-Policy": CSP_RULE,
-                    "Content-Type": "text/html; charset=UTF-8",
-                }
-            })
+            return this.fetchDir(url, dirpath, dir)
         }
 
         const file = this.#filesMap.get(url.pathname.toLowerCase())
@@ -204,6 +139,76 @@ export class GameServer {
                 "Content-Type": contentType,
                 // polyfill外でのストレージ類への書き込みを抑制するために CSP sandbox を使用
                 "Content-Security-Policy": CSP_RULE,
+            }
+        })
+    }
+
+    private async fetchDir(url: URL, dirpath: string, dir: DirEntry[]) {
+        let html = "<!DOCTYPE html><html><head><meta charset=UTF-8></head><body><h1>Index of " + escapeHTML(decodeURI(url.pathname)) + "</h1>"
+        if (dir.some(x => x.name === "package.json")) {
+            const packageJsonChecker = "(" + (() => {
+                const xhr = new XMLHttpRequest()
+                xhr.open("GET", "package.json", false)
+                xhr.send()
+                const json = JSON.parse(xhr.responseText)
+                if (json.main && json.main.endsWith(".html") && json.window && json.window.width && json.window.height) {
+                    // #region RPGツクールMV用の処理
+                    const systemJsonUrl = new URL("./data/System.json", new URL(json.main, location.href))
+                    try {
+                        const systemJsonXhr = new XMLHttpRequest()
+                        systemJsonXhr.open("GET", systemJsonUrl.href, false)
+                        systemJsonXhr.send()
+                        const systemJson = JSON.parse(systemJsonXhr.responseText)
+                        if (systemJson && typeof systemJson.gameTitle === "string") {
+                            json.window.title = systemJson.gameTitle
+                        }
+                    } catch(e) {
+                        console.error("Failed to load System.json", e)
+                    }
+                    // #endregion
+                    const button = document.createElement("button")
+                    if (json.window.title) {
+                        button.innerText = json.window.title
+                    } else {
+                        button.innerText = "このフォルダのアプリ"
+                    }
+                    button.innerText += "を起動"
+                    button.addEventListener("click", () => {
+                        resizeTo(
+                            json.window.width + (window.outerWidth - window.innerWidth),
+                            json.window.height + (window.outerHeight - window.innerHeight)
+                        )
+                        setTimeout(() => {
+                            location.href = json.main
+                        }, 100)
+                    })
+                    document.currentScript?.parentElement?.appendChild(button)
+                }
+            }).toString() + ")()"
+            html += "<div><script>" + packageJsonChecker + "</script></div>"
+        }
+        html += "<ul>"
+        if (dirpath !== "/") {
+            html += "<li><a href=..>..</a></li>"
+        }
+        for (const file of dir) {
+            html += "<li>"
+            html += file.isDirectory ? "📁 " : "📄 "
+            html += "<a"
+            if (file.isDirectory || file.name.toLowerCase().endsWith(".html")) {
+                html += " href=\"" + encodeURI(file.name) + (file.isDirectory ? "/" : "") + "\""
+            } else if (file.name.toLowerCase().endsWith(".txt")) {
+                html += " href=\"" + encodeURI(file.name) + "?mode=textviewer\""
+            }
+            html += ">"
+            html += escapeHTML(file.name)
+            html += "</a>"
+        }
+        html += "</ul><hr><address>motplayer index</address></body></html>"
+        return new Response(html, {
+            headers: {
+                "Content-Security-Policy": CSP_RULE,
+                "Content-Type": "text/html; charset=UTF-8",
             }
         })
     }

@@ -1,0 +1,28 @@
+on:
+  push:
+  pull_request:
+
+jobs:
+  build-asar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: corepack enable
+      - run: pnpm install
+      - run: pnpm build
+      - run: |
+          cat - > .npmrc <<EOF
+          node-linker=hoisted
+          public-hoist-pattern=*
+          shamefully-hoist=true"
+          EOF
+      - run: rm -rf node_modules && pnpm install --prod
+      - run: rm -rf src .git webpack.config.* tsconfig.json
+      - run: pnpx @electron/asar pack . ../motplayer.asar && mv ../motplayer.asar ./
+      - uses: actions/upload-artifact@v4
+        with:
+          name: motplayer.asar
+          path: motplayer.asar

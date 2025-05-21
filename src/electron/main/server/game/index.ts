@@ -106,7 +106,7 @@ export class GameServer {
         return new GameServer(zipPath, reader, zCompatibilityOptions.parse(compatibilityOptions), zipPath.split("/").slice(-1)[0].split(".")[0])
     }
 
-    async fetch(request: Request) {
+    async fetch(request: Request): Promise<Response> {
         const url = new URL(request.url)
         
         if (url.pathname === "/api/localstorage") {
@@ -364,5 +364,7 @@ export class GameServer {
             const image = await request.arrayBuffer()
             this.browserWindow.setIcon(nativeImage.createFromBuffer(Buffer.from(image)))
         }
+
+        return new Response("ok")
     }
 }

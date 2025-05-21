@@ -9,6 +9,7 @@ import { readFile, unlink, writeFile } from "node:fs/promises"
 import { escapeHTML } from "./html-escape.js"
 import { DatabaseSync } from "node:sqlite"
 import { createHash } from "node:crypto"
+import { join } from "node:path"
 
 const zCompatibilityOptions = z.object({
     disableVorbisDecoder: z.boolean().default(true).describe([
@@ -125,7 +126,7 @@ export class GameServer {
         }
 
         if (url.searchParams.get("mode") === "textviewer") {
-            const res = await readFile(new URL("../../../../../static/textviewer.html", import.meta.url).pathname)
+            const res = await readFile(join(import.meta.dirname, "../../../../../static/textviewer.html"))
             return new Response(res, {
                 headers: {
                     "Content-Security-Policy": CSP_RULE,

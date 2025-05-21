@@ -26,7 +26,7 @@ const createWindow = () => {
         width: 800,
         height: 600,
         webPreferences: {
-            preload: path.join(new URL(import.meta.url).pathname, "/../../preload.cjs"),
+            preload: path.join(import.meta.dirname, "../../preload.cjs"),
             backgroundThrottling: false,
             enableWebSQL: false,
             sandbox: true,

@@ -34,6 +34,7 @@ const createWindow = () => {
         },
     })
 
+    window.setAutoHideMenuBar(true)
     window.webContents.openDevTools({
         mode: "detach",
     })

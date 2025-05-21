@@ -10,7 +10,7 @@ import { escapeHTML } from "./html-escape.js"
 import { DatabaseSync } from "node:sqlite"
 import { createHash } from "node:crypto"
 import { join } from "node:path"
-import { dialog } from "electron"
+import { BrowserWindow, dialog, nativeImage } from "electron"
 
 const zCompatibilityOptions = z.object({
     disableVorbisDecoder: z.boolean().default(true).describe([
@@ -39,6 +39,7 @@ const CSP_RULE = "default-src 'self' 'unsafe-eval' 'unsafe-inline' data: blob: m
 
 type DirEntry = { name: string; isDirectory: boolean }
 export class GameServer {
+    public browserWindow?: BrowserWindow
     public readonly zipId: string
     #filesMap = new Map<string, ZipFileEntry>()
     #dirMap = new Map<string, DirEntry[]>()
@@ -110,6 +111,10 @@ export class GameServer {
         
         if (url.pathname === "/api/localstorage") {
             return this.fetchLocalStorageAPI(request)
+        }
+
+        if (url.pathname === "/api/gamestart") {
+            return this.fetchGameStart(request)
         }
 
         let dirpath = url.pathname.toLowerCase()
@@ -250,11 +255,22 @@ export class GameServer {
                         button.innerText = "このフォルダのアプリ"
                     }
                     button.innerText += "を起動"
-                    button.addEventListener("click", () => {
+                    button.addEventListener("click", async () => {
                         resizeTo(
                             json.window.width + (window.outerWidth - window.innerWidth),
                             json.window.height + (window.outerHeight - window.innerHeight)
                         )
+                        try {
+                            const iconUrl = new URL(json.window.icon, location.href)
+                            const iconRes = await fetch(iconUrl.href)
+                            const iconBody = await iconRes.arrayBuffer()
+                            await fetch("/api/gamestart", {
+                                method: "POST",
+                                body: iconBody,
+                            })
+                        } catch(e) {
+                            console.error("motplayer: failed to get icon for game", e)
+                        }
                         setTimeout(() => {
                             location.href = json.main
                         }, 100)
@@ -341,5 +357,12 @@ export class GameServer {
                 "Content-Type": "application/json",
             }
         })
+    }
+
+    private async fetchGameStart(request: Request) {
+        if (this.browserWindow != null) {
+            const image = await request.arrayBuffer()
+            this.browserWindow.setIcon(nativeImage.createFromBuffer(Buffer.from(image)))
+        }
     }
 }

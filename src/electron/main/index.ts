@@ -38,7 +38,9 @@ const createWindow = () => {
     window.webContents.openDevTools({
         mode: "detach",
     })
-    window.setRepresentedFilename(gameServers.get(gameDomain)!.zipPath)
+    const gameServer = gameServers.get(gameDomain)!
+    gameServer.browserWindow = window
+    window.setRepresentedFilename(gameServer.zipPath)
     window.loadURL("motplayer-game://" + gameDomain + "/")
 }
 

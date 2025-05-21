@@ -310,7 +310,7 @@ export class GameServer {
 
     private async fetchLocalStorageAPI(request: Request): ReturnType<typeof this.fetchLocalStorageAPIInner> {
         try {
-            const res = await this.fetchLocalStorageAPIInner(request)
+            const res = await this.fetchLocalStorageAPIInner(request.clone())
             return res
         } catch(e) {
             if (this.dontRetrySave) {

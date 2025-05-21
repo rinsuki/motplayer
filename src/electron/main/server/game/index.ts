@@ -10,6 +10,7 @@ import { escapeHTML } from "./html-escape.js"
 import { DatabaseSync } from "node:sqlite"
 import { createHash } from "node:crypto"
 import { join } from "node:path"
+import { dialog } from "electron"
 
 const zCompatibilityOptions = z.object({
     disableVorbisDecoder: z.boolean().default(true).describe([
@@ -289,7 +290,37 @@ export class GameServer {
         })
     }
 
-    private async fetchLocalStorageAPI(request: Request) {
+    dontRetrySave = false
+
+    private async fetchLocalStorageAPI(request: Request): ReturnType<typeof this.fetchLocalStorageAPIInner> {
+        try {
+            const res = await this.fetchLocalStorageAPIInner(request)
+            return res
+        } catch(e) {
+            if (this.dontRetrySave) {
+                throw e
+            }
+            console.error("motplayer: localStorage API error", e)
+            const ret = await dialog.showMessageBox({
+                message: "motplayer: localStorageの書き込みに失敗しました",
+                detail: "セーブデータがSambaなどのネットワークドライブ上にある場合、フォルダ一覧を表示する、再接続するなどの操作を行ってから再試行すると書き込める場合があります。\n\n" + e,
+                type: "error",
+                buttons: ["再試行", "無視", "これ以降常に無視"],
+                cancelId: 1,
+                defaultId: 0,
+            })
+            if (ret.response === 0) {
+                return this.fetchLocalStorageAPI(request)
+            } else {
+                if (ret.response === 2) {
+                    this.dontRetrySave = true
+                }
+                throw e
+            }
+        }
+    }
+
+    private async fetchLocalStorageAPIInner(request: Request) {
         const json = await request.json()
         const req = zLocalStorageRequest.parse(json)
         let res = undefined

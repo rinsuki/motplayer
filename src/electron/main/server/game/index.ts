@@ -50,7 +50,7 @@ export class GameServer {
         this.zipId = createHash("sha256").update(reader.files.map(f => [f.fileName, f.uncompressedSize, f.crc32].join(",")).join(",")).digest("hex")
         console.log(reader.directories.keys())
         this.#filesMap = new Map(reader.files.map(f => {
-            const path = "/" + joinposix(f.dirName, f.fileName).split("/").map(x => encodeURI(x)).join("/").toLowerCase()
+            const path = "/" + joinposix(f.dirName, f.fileName).split("/").map(x => encodeURI(x.toLowerCase())).join("/")
             return [path, f]
         }))
         this.#dirMap = new Map(reader.directories.entries().map(([k, v]) => {
@@ -126,8 +126,10 @@ export class GameServer {
             return this.fetchDir(url, dirpath, dir)
         }
 
-        const file = this.#filesMap.get(decodeURIComponent(url.pathname.toLowerCase()))
+        const fileKey = url.pathname.split("/").map(x => encodeURI(decodeURIComponent(x).toLowerCase())).join("/")
+        const file = this.#filesMap.get(fileKey)
         if (file == null) {
+            console.log("try to read", fileKey)
             throw new Error("FILE_NOT_FOUND")
         }
 

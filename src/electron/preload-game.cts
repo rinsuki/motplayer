@@ -1,3 +1,4 @@
+// Game window auto-resize logic
 setTimeout(() => {
     const canvas = document.querySelector('canvas');
     if (canvas == null) {

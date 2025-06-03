@@ -1,16 +1,17 @@
-import { app, protocol, BrowserWindow, dialog, MessageBoxOptions, shell } from "electron"
+import { app, protocol, BrowserWindow, dialog, MessageBoxOptions, shell, ipcMain, Menu } from "electron"
 import path from "node:path"
 import { GameServer } from "./server/game/index.js"
 import { fetchShared } from "./server/shared/index.js"
+import { GameLibraryManager } from "./library/game-library.js"
 
-const zippath = process.argv[2]
 const gameServers = new Map<string, GameServer>()
+const gameLibrary = new GameLibraryManager()
+
 function registerGameServer(gameServer: GameServer) {
     const domain = gameServer.zipId + ".game.invalid"
     gameServers.set(domain, gameServer)
     return domain
 }
-const gameDomain = registerGameServer(await GameServer.init(zippath))
 
 protocol.registerSchemesAsPrivileged([{
     scheme: "motplayer-game",
@@ -22,12 +23,31 @@ protocol.registerSchemesAsPrivileged([{
     }
 }])
 
-const createWindow = () => {
+const createLauncherWindow = () => {
+    const window = new BrowserWindow({
+        width: 1000,
+        height: 700,
+        webPreferences: {
+            preload: path.join(import.meta.dirname, "../preload-launcher.cjs"),
+            sandbox: false,
+            safeDialogs: true,
+        },
+    })
+
+    window.setAutoHideMenuBar(true)
+    window.loadFile(path.join(import.meta.dirname, "../../../static/launcher.html"))
+    return window
+}
+
+const createGameWindow = async (zipPath: string) => {
+    const gameServer = await GameServer.init(zipPath)
+    const gameDomain = registerGameServer(gameServer)
+    
     const window = new BrowserWindow({
         width: 800,
         height: 600,
         webPreferences: {
-            preload: path.join(import.meta.dirname, "../../preload.cjs"),
+            preload: path.join(import.meta.dirname, "../preload-game.cjs"),
             backgroundThrottling: false,
             enableWebSQL: false,
             sandbox: true,
@@ -39,13 +59,99 @@ const createWindow = () => {
     window.webContents.openDevTools({
         mode: "detach",
     })
-    const gameServer = gameServers.get(gameDomain)!
     gameServer.browserWindow = window
     window.setRepresentedFilename(gameServer.zipPath)
     window.loadURL("motplayer-game://" + gameDomain + "/")
+    
+    return window
 }
 
-app.whenReady().then(() => {
+// IPC handlers
+ipcMain.handle("get-games", async () => {
+    return await gameLibrary.getGames()
+})
+
+ipcMain.handle("add-game", async (event, zipPath: string) => {
+    return await gameLibrary.addGame(zipPath)
+})
+
+ipcMain.handle("launch-game", async (event, gameId: string) => {
+    const games = await gameLibrary.getGames()
+    const game = games.find(g => g.id === gameId)
+    if (!game) {
+        throw new Error("Game not found")
+    }
+    
+    await gameLibrary.updateLastPlayed(gameId)
+    await createGameWindow(game.zipPath)
+})
+
+ipcMain.handle("select-game-file", async (event) => {
+    const window = BrowserWindow.fromWebContents(event.sender)
+    const result = await dialog.showOpenDialog(window!, {
+        properties: ["openFile"],
+        filters: [
+            { name: "Game Files", extensions: ["zip"] },
+            { name: "All Files", extensions: ["*"] }
+        ]
+    })
+    
+    if (!result.canceled && result.filePaths.length > 0) {
+        return result.filePaths[0]
+    }
+    return null
+})
+
+ipcMain.handle("remove-game", async (event, gameId: string) => {
+    await gameLibrary.removeGame(gameId)
+    // Notify the launcher window to refresh
+    const window = BrowserWindow.fromWebContents(event.sender)
+    if (window) {
+        window.webContents.send("game-removed")
+    }
+})
+
+ipcMain.on("show-game-context-menu", (event, gameId: string, zipPath: string) => {
+    const window = BrowserWindow.fromWebContents(event.sender)
+    if (!window) return
+
+    const template = [
+        {
+            label: process.platform === "win32" ? "Explorerで表示" : process.platform === "darwin" ? "Finderで表示" : "ファイルマネージャーで表示",
+            click: () => {
+                shell.showItemInFolder(zipPath)
+            }
+        },
+        {
+            type: "separator" as const
+        },
+        {
+            label: "ライブラリから削除",
+            click: async () => {
+                const result = await dialog.showMessageBox(window, {
+                    type: "question",
+                    message: "ライブラリから削除",
+                    detail: "このゲームをライブラリから削除しますか？\n（ZIPファイル自体は削除されません）",
+                    buttons: ["削除", "キャンセル"],
+                    defaultId: 0,
+                    cancelId: 1,
+                })
+                
+                if (result.response === 0) {
+                    await gameLibrary.removeGame(gameId)
+                    window.webContents.send("game-removed")
+                }
+            }
+        }
+    ]
+
+    const menu = Menu.buildFromTemplate(template)
+    menu.popup({ window })
+})
+
+app.whenReady().then(async () => {
+    await gameLibrary.init()
+    
     protocol.handle("motplayer-game", async request => {
         const url = new URL(request.url)
         if (url.host === "shared") {
@@ -56,7 +162,20 @@ app.whenReady().then(() => {
         }
         throw new Error("Invalid URL: " + request.url)
     })
-    createWindow()
+    
+    // If zip path is provided as argument, launch game directly
+    const zipPath = process.argv[2]
+    if (zipPath) {
+        await createGameWindow(zipPath)
+        const games = await gameLibrary.getGames()
+        const game = games.find(g => g.zipPath === zipPath)
+        if (game) {
+            await gameLibrary.updateLastPlayed(game.id)
+        }
+    } else {
+        // Otherwise, show launcher
+        createLauncherWindow()
+    }
 })
 
 app.on("window-all-closed", () => {

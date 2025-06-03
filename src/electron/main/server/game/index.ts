@@ -75,8 +75,13 @@ export class GameServer {
         try {
             this.#database = new DatabaseSync(zipPath + ".motplayer_save")
         } catch(e) {
-            console.warn("Failed to create save db file on zipPath", e)
-            this.#database = new DatabaseSync(savePath + ".motplayer_save")
+            dialog.showMessageBoxSync({
+                type: "error",
+                message: "motplayer: セーブデータの作成(または読み込み)に失敗しました",
+                detail: "motplayer は zip が配置されているフォルダに .motplayer_save というファイルを作成しますが、何らかの理由でファイルが作成、または開くことができなかったため、ゲームの起動に失敗しました。\nzipファイルを別の場所に移動する、アクセス権を確認するなどしてから再度お試しください。\n\n" + `${e}`,
+                buttons: ["OK"],
+            })
+            throw e
         }
         this.#database.exec(`CREATE TABLE IF NOT EXISTS local_storage (key TEXT PRIMARY KEY, value TEXT, created_at INTEGER, updated_at INTEGER) STRICT`)
         readFile(zipPath + ".motplayer.save.import.json", { encoding: "utf-8" }).then(async data => {
@@ -100,9 +105,19 @@ export class GameServer {
     }
 
     static async init(zipPath: string, compatibilityOptions: unknown | z.infer<typeof zCompatibilityOptions> = {}) {
-        const fp = await open(zipPath, "r")
-        const provider = await FileHandleBlobProvider.create(fp)
-        const reader = await ZipReader.init(provider, "Shift_JIS")
+        let reader
+        try {
+            const fp = await open(zipPath, "r")
+            const provider = await FileHandleBlobProvider.create(fp)
+            reader = await ZipReader.init(provider, "Shift_JIS")
+        } catch(e) {
+            dialog.showMessageBoxSync({
+                type: "error",
+                message: "motplayer: zipファイルの読み込みに失敗しました",
+                detail: "指定された zip ファイルの読み込みに失敗しました。\nzipファイルのパスを確認するか、アーカイバで展開してから再度圧縮してみてください。\n\n" + `${e}`,
+            })
+            throw e
+        }
         return new GameServer(zipPath, reader, zCompatibilityOptions.parse(compatibilityOptions), zipPath.split("/").slice(-1)[0].split(".")[0])
     }
 

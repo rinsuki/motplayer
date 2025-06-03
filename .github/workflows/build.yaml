@@ -79,3 +79,25 @@ jobs:
         with:
           name: motplayer-mac-${{ matrix.arch }}.zip
           path: motplayer-mac-${{ matrix.arch }}.zip
+
+  create-release:
+    runs-on: ubuntu-latest
+    needs: [build-win, build-mac]
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: motplayer-*
+          merge-multiple: true
+      - name: Create Release
+        run: |
+          gh release create ${{ github.ref_name }} \
+            --draft \
+            --title "${{ github.ref_name }}" \
+            motplayer-windows-x64.zip \
+            motplayer-windows-arm64.zip \
+            motplayer-mac-x64.zip \
+            motplayer-mac-arm64.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

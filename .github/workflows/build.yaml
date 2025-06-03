@@ -45,6 +45,7 @@ jobs:
       - run: rm app/resources/*.asar
       - run: mv motplayer.asar app/resources/app.asar
       - run: mv app/{electron,motplayer}.exe
+      - run: mv app/LICENSE{,.electron.txt}
       - run: cd app && zip -r ../motplayer-windows-${{ matrix.arch }}.zip .
       - uses: actions/upload-artifact@v4
         with:
@@ -65,7 +66,12 @@ jobs:
       - run: rm app/Electron.app/Contents/Resources/*.asar
       - run: mv motplayer.asar app/Electron.app/Contents/Resources/app.asar
       - run: mv app/{Electron,motplayer}.app
-      - run: defaults write ./app/motplayer.app/Contents/Info.plist CFBundleIdentifier net.rinsuki.apps.motplayer
+      - run: |
+          defaults write $(pwd)/app/motplayer.app/Contents/Info.plist CFBundleIdentifier net.rinsuki.apps.motplayer
+          defaults write $(pwd)/app/motplayer.app/Contents/Info.plist CFBundleDisplayName motplayer
+          defaults write $(pwd)/app/motplayer.app/Contents/Info.plist CFBundleName motplayer
+          defaults write $(pwd)/app/motplayer.app/Contents/Info.plist LSApplicationCategoryType public.app-category.games
+          defaults delete $(pwd)/app/motplayer.app/Contents/Info.plist ElectronAsarIntegrity
       - run: codesign --force --sign - --deep ./app/motplayer.app
       - run: cd app && zip -r ../motplayer-mac-${{ matrix.arch }}.zip .
       - uses: actions/upload-artifact@v4

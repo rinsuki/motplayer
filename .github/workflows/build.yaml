@@ -1,6 +1,10 @@
+name: Build
 on:
   push:
   pull_request:
+
+env:
+  ELECTRON_VERSION: v36.3.2
 
 jobs:
   build-asar:
@@ -26,3 +30,45 @@ jobs:
         with:
           name: motplayer.asar
           path: motplayer.asar
+  build-win:
+    runs-on: ubuntu-latest
+    needs: build-asar
+    strategy:
+      matrix:
+        arch: [x64, arm64]
+    steps:
+      - run: wget -O electron.zip https://github.com/electron/electron/releases/download/${{ env.ELECTRON_VERSION }}/electron-${{ env.ELECTRON_VERSION }}-win32-${{ matrix.arch }}.zip
+      - run: unzip electron.zip -d app
+      - uses: actions/download-artifact@v4
+        with:
+          name: motplayer.asar
+      - run: rm app/resources/*.asar
+      - run: mv motplayer.asar app/resources/app.asar
+      - run: mv app/{electron,motplayer}.exe
+      - run: cd app && zip -r ../motplayer-windows-${{ matrix.arch }}.zip .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: motplayer-windows-${{ matrix.arch }}.zip
+          path: motplayer-windows-${{ matrix.arch }}.zip
+  build-mac:
+    runs-on: macos-latest
+    needs: build-asar
+    strategy:
+      matrix:
+        arch: [x64, arm64]
+    steps:
+      - run: wget -O electron.zip https://github.com/electron/electron/releases/download/${{ env.ELECTRON_VERSION }}/electron-${{ env.ELECTRON_VERSION }}-darwin-${{ matrix.arch }}.zip
+      - run: unzip electron.zip -d app
+      - uses: actions/download-artifact@v4
+        with:
+          name: motplayer.asar
+      - run: rm app/Electron.app/Contents/Resources/*.asar
+      - run: mv motplayer.asar app/Electron.app/Contents/Resources/app.asar
+      - run: mv app/{Electron,motplayer}.app
+      - run: defaults write ./app/motplayer.app/Contents/Info.plist CFBundleIdentifier net.rinsuki.apps.motplayer
+      - run: codesign --force --sign - --deep ./app/motplayer.app
+      - run: cd app && zip -r ../motplayer-mac-${{ matrix.arch }}.zip .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: motplayer-mac-${{ matrix.arch }}.zip
+          path: motplayer-mac-${{ matrix.arch }}.zip

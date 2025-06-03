@@ -65,6 +65,7 @@ jobs:
           name: motplayer.asar
       - run: rm app/Electron.app/Contents/Resources/*.asar
       - run: mv motplayer.asar app/Electron.app/Contents/Resources/app.asar
+      - run: mv app/LICENSE{,.electron.txt}
       - run: mv app/{Electron,motplayer}.app
       - run: |
           defaults write $(pwd)/app/motplayer.app/Contents/Info.plist CFBundleIdentifier net.rinsuki.apps.motplayer

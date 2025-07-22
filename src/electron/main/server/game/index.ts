@@ -24,7 +24,7 @@ const zCompatibilityOptions = z.object({
         "理由: localStorage を motplayer の管理下に置くことで、motplayer によりセーブデータが管理できるようになります。",
         "意図せず管理されていないストレージを使うことを防ぐことを目的として、CSP sandbox を使用してストレージ類のAPIを無効化しているため、これがないとストレージが一切存在しなくなります。",
     ].join("\n")),
-    requirePolyfillSeriesOne: z.array(z.string()).default(["js/plugins/inazuma/"]).describe([
+    requirePolyfillSeriesOne: z.array(z.string()).default(["js/plugins/inazuma/", "js/plugins/Nanairo"]).describe([
         "require polyfill を挿入 (するパスを指定)",
         "理由: 一部ゲームは NW.js 環境のみを想定したプラグインを使用しているため、require() のpolyfillが必要になります。", 
         "このpolyfillは一部モジュールのみのpolyfillになるので、全てのゲームがこれで動作するわけではありません。",
